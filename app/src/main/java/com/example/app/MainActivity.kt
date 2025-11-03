@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun StudentApp() {
-    // Lista de estudiantes con datos iniciales (20+ registros)
+    // Lista de estudiantes con datos iniciales
     var students by remember { mutableStateOf(getSampleStudents()) }
     var currentScreen by remember { mutableStateOf("home") }
     
@@ -370,7 +370,7 @@ fun StudentInfoRow(label: String, value: String) {
     }
 }
 
-// Función para generar datos de muestra (20+ estudiantes)
+// Función para generar datos de muestra
 fun getSampleStudents(): List<Student> {
     return listOf(
         Student("75123456", "Juan Carlos", "García López", "Ingeniería de Sistemas"),
