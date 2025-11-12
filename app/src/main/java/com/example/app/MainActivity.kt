@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,7 +28,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.app.data.ThemePreferencesRepository
+import com.example.app.ui.screens.ThemeSettingsScreen
 import com.example.app.ui.theme.AppTheme
+import com.example.app.viewmodel.ThemeViewModel
 
 // Data class para representar un estudiante
 data class Student(
@@ -41,15 +46,21 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AppTheme(darkTheme = true) {
-                StudentApp()
+            val themeRepository = ThemePreferencesRepository(this)
+            val themeViewModel: ThemeViewModel = viewModel {
+                ThemeViewModel(themeRepository)
+            }
+            val isDarkTheme by themeViewModel.isDarkTheme.collectAsState()
+            
+            AppTheme(darkTheme = isDarkTheme) {
+                StudentApp(themeViewModel = themeViewModel)
             }
         }
     }
 }
 
 @Composable
-fun StudentApp() {
+fun StudentApp(themeViewModel: ThemeViewModel) {
     // Lista de estudiantes con datos iniciales
     var students by remember { mutableStateOf(getSampleStudents()) }
     var currentScreen by remember { mutableStateOf("home") }
@@ -57,7 +68,8 @@ fun StudentApp() {
     when (currentScreen) {
         "home" -> HomeScreen(
             onNavigateToForm = { currentScreen = "form" },
-            onNavigateToList = { currentScreen = "list" }
+            onNavigateToList = { currentScreen = "list" },
+            onNavigateToThemeSettings = { currentScreen = "theme" }
         )
         "form" -> FormScreen(
             onBack = { currentScreen = "home" },
@@ -70,6 +82,10 @@ fun StudentApp() {
             students = students,
             onBack = { currentScreen = "home" }
         )
+        "theme" -> ThemeSettingsScreen(
+            themeViewModel = themeViewModel,
+            onBack = { currentScreen = "home" }
+        )
     }
 }
 
@@ -77,12 +93,21 @@ fun StudentApp() {
 @Composable
 fun HomeScreen(
     onNavigateToForm: () -> Unit,
-    onNavigateToList: () -> Unit
+    onNavigateToList: () -> Unit,
+    onNavigateToThemeSettings: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Sistema de Estudiantes") },
+                actions = {
+                    IconButton(onClick = onNavigateToThemeSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Configuración de Tema"
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -403,6 +428,5 @@ fun getSampleStudents(): List<Student> {
 @Composable
 fun PreviewStudentApp() {
     AppTheme(darkTheme = true) {
-        StudentApp()
     }
 }
