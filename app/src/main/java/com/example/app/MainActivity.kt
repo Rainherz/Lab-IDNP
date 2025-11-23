@@ -1,14 +1,10 @@
 package com.example.app
 
-import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,25 +18,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.app.data.ThemePreferencesRepository
+import com.example.app.database.AppDatabase
+import com.example.app.database.entities.Student
+import com.example.app.repository.StudentRepository
 import com.example.app.ui.screens.ThemeSettingsScreen
 import com.example.app.ui.theme.AppTheme
+import com.example.app.viewmodel.StudentViewModel
 import com.example.app.viewmodel.ThemeViewModel
 
-// Data class para representar un estudiante
-data class Student(
-    val cui: String,
-    val nombres: String,
-    val apellidos: String,
-    val carreraProfesional: String
-)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,19 +41,30 @@ class MainActivity : ComponentActivity() {
             val themeViewModel: ThemeViewModel = viewModel {
                 ThemeViewModel(themeRepository)
             }
+            
+            val database = AppDatabase.getDatabase(this)
+            val studentRepository = StudentRepository(database.studentDao())
+            val studentViewModel: StudentViewModel = viewModel {
+                StudentViewModel(studentRepository)
+            }
+            
             val isDarkTheme by themeViewModel.isDarkTheme.collectAsState()
             
             AppTheme(darkTheme = isDarkTheme) {
-                StudentApp(themeViewModel = themeViewModel)
+                StudentApp(
+                    themeViewModel = themeViewModel,
+                    studentViewModel = studentViewModel
+                )
             }
         }
     }
 }
 
 @Composable
-fun StudentApp(themeViewModel: ThemeViewModel) {
-    // Lista de estudiantes con datos iniciales
-    var students by remember { mutableStateOf(getSampleStudents()) }
+fun StudentApp(
+    themeViewModel: ThemeViewModel,
+    studentViewModel: StudentViewModel
+) {
     var currentScreen by remember { mutableStateOf("home") }
     
     when (currentScreen) {
@@ -72,14 +74,12 @@ fun StudentApp(themeViewModel: ThemeViewModel) {
             onNavigateToThemeSettings = { currentScreen = "theme" }
         )
         "form" -> FormScreen(
+            studentViewModel = studentViewModel,
             onBack = { currentScreen = "home" },
-            onAddStudent = { student ->
-                students = students + student
-                currentScreen = "list"
-            }
+            onStudentAdded = { currentScreen = "list" }
         )
         "list" -> ListScreen(
-            students = students,
+            studentViewModel = studentViewModel,
             onBack = { currentScreen = "home" }
         )
         "theme" -> ThemeSettingsScreen(
@@ -176,14 +176,17 @@ fun HomeScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormScreen(
+    studentViewModel: StudentViewModel,
     onBack: () -> Unit,
-    onAddStudent: (Student) -> Unit
+    onStudentAdded: () -> Unit
 ) {
     var cui by remember { mutableStateOf("") }
     var nombres by remember { mutableStateOf("") }
     var apellidos by remember { mutableStateOf("") }
     var carrera by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
     
     Scaffold(
         topBar = {
@@ -253,7 +256,7 @@ fun FormScreen(
             
             if (showError) {
                 Text(
-                    text = "Por favor, complete todos los campos",
+                    text = if (errorMessage.isNotEmpty()) errorMessage else "Por favor, complete todos los campos",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -265,24 +268,43 @@ fun FormScreen(
                 onClick = {
                     if (cui.isNotBlank() && nombres.isNotBlank() && 
                         apellidos.isNotBlank() && carrera.isNotBlank()) {
-                        onAddStudent(
+                        isLoading = true
+                        studentViewModel.addStudent(
                             Student(
-                                cui = cui,
-                                nombres = nombres,
-                                apellidos = apellidos,
-                                carreraProfesional = carrera
-                            )
+                                cui = cui.trim(),
+                                nombres = nombres.trim(),
+                                apellidos = apellidos.trim(),
+                                carreraProfesional = carrera.trim()
+                            ),
+                            onSuccess = {
+                                isLoading = false
+                                showError = false
+                                onStudentAdded()
+                            },
+                            onError = { error ->
+                                isLoading = false
+                                errorMessage = error
+                                showError = true
+                            }
                         )
-                        showError = false
                     } else {
+                        errorMessage = ""
                         showError = true
                     }
                 },
+                enabled = !isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
             ) {
-                Text("Guardar Estudiante", fontSize = 16.sp)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Guardar Estudiante", fontSize = 16.sp)
+                }
             }
         }
     }
@@ -291,9 +313,11 @@ fun FormScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListScreen(
-    students: List<Student>,
+    studentViewModel: StudentViewModel,
     onBack: () -> Unit
 ) {
+    val uiState by studentViewModel.uiState.collectAsState()
+    val students = uiState.students
     Scaffold(
         topBar = {
             TopAppBar(
@@ -310,16 +334,50 @@ fun ListScreen(
             )
         }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            itemsIndexed(students) { index, student ->
-                StudentCard(student = student, index = index + 1)
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else if (students.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "No hay estudiantes registrados",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Agrega el primer estudiante usando el formulario",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                itemsIndexed(students) { index, student ->
+                    StudentCard(student = student, index = index + 1)
+                }
             }
         }
     }
@@ -395,38 +453,4 @@ fun StudentInfoRow(label: String, value: String) {
     }
 }
 
-// Función para generar datos de muestra
-fun getSampleStudents(): List<Student> {
-    return listOf(
-        Student("75123456", "Juan Carlos", "García López", "Ingeniería de Sistemas"),
-        Student("75234567", "María Elena", "Rodríguez Pérez", "Medicina Humana"),
-        Student("75345678", "Pedro José", "Martínez Sánchez", "Derecho"),
-        Student("75456789", "Ana Sofía", "Hernández Torres", "Arquitectura"),
-        Student("75567890", "Luis Miguel", "González Ramírez", "Ingeniería Civil"),
-        Student("75678901", "Carmen Rosa", "Díaz Flores", "Contabilidad"),
-        Student("75789012", "Roberto Carlos", "Vargas Mendoza", "Administración"),
-        Student("75890123", "Patricia Isabel", "Castro Ruiz", "Psicología"),
-        Student("75901234", "Fernando Andrés", "Morales Gutiérrez", "Ingeniería Industrial"),
-        Student("76012345", "Gabriela Beatriz", "Ortiz Jiménez", "Enfermería"),
-        Student("76123456", "Diego Alejandro", "Romero Cruz", "Ingeniería Electrónica"),
-        Student("76234567", "Valeria Cristina", "Silva Navarro", "Comunicación Social"),
-        Student("76345678", "Javier Eduardo", "Ramos Vega", "Economía"),
-        Student("76456789", "Daniela Fernanda", "Paredes Quispe", "Biología"),
-        Student("76567890", "Sebastián Mateo", "Chávez Huamán", "Ingeniería Mecánica"),
-        Student("76678901", "Camila Andrea", "Mendoza Ccama", "Odontología"),
-        Student("76789012", "Nicolás Emilio", "Quispe Mamani", "Ingeniería Química"),
-        Student("76890123", "Isabella Sofía", "Flores Condori", "Farmacia y Bioquímica"),
-        Student("76901234", "Matías Benjamín", "Torres Apaza", "Ingeniería Ambiental"),
-        Student("77012345", "Valentina Lucía", "Huamán Puma", "Turismo y Hotelería"),
-        Student("77123456", "Santiago Rafael", "Ccama Yupanqui", "Ingeniería de Minas"),
-        Student("77234567", "Renata Alejandra", "Mamani Ticona", "Trabajo Social"),
-        Student("77345678", "Joaquín Martín", "Condori Layme", "Agronomía")
-    )
-}
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewStudentApp() {
-    AppTheme(darkTheme = true) {
-    }
-}
