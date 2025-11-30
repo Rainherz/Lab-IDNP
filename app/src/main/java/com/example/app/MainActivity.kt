@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +28,7 @@ import com.example.app.data.ThemePreferencesRepository
 import com.example.app.database.AppDatabase
 import com.example.app.database.entities.Student
 import com.example.app.repository.StudentRepository
+import com.example.app.ui.screens.MonitorScreen
 import com.example.app.ui.screens.ThemeSettingsScreen
 import com.example.app.ui.theme.AppTheme
 import com.example.app.viewmodel.StudentViewModel
@@ -71,7 +73,8 @@ fun StudentApp(
         "home" -> HomeScreen(
             onNavigateToForm = { currentScreen = "form" },
             onNavigateToList = { currentScreen = "list" },
-            onNavigateToThemeSettings = { currentScreen = "theme" }
+            onNavigateToThemeSettings = { currentScreen = "theme" },
+            onNavigateToMonitor = { currentScreen = "monitor" }
         )
         "form" -> FormScreen(
             studentViewModel = studentViewModel,
@@ -86,6 +89,9 @@ fun StudentApp(
             themeViewModel = themeViewModel,
             onBack = { currentScreen = "home" }
         )
+        "monitor" -> MonitorScreen(
+            onBack = { currentScreen = "home" }
+        )
     }
 }
 
@@ -94,7 +100,8 @@ fun StudentApp(
 fun HomeScreen(
     onNavigateToForm: () -> Unit,
     onNavigateToList: () -> Unit,
-    onNavigateToThemeSettings: () -> Unit
+    onNavigateToThemeSettings: () -> Unit,
+    onNavigateToMonitor: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -168,6 +175,26 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Ver Lista de Estudiantes", fontSize = 18.sp)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Button(
+                onClick = onNavigateToMonitor,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Monitor,
+                    contentDescription = "Monitor del Sistema",
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Monitor del Sistema", fontSize = 18.sp)
             }
         }
     }
